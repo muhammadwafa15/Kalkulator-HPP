@@ -1,10 +1,12 @@
-import React from 'react';
-import { BarChart, Clock, Wallet, Info, Plus, Trash2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { BarChart, Clock, Wallet, Plus, Trash2, Save, X } from 'lucide-react';
 import { formatRupiah } from '../lib/utils';
 import { AppData, InvestmentItem } from '../types';
+import { motion } from 'motion/react';
 
 type BepRoiProps = {
   data: AppData;
+  setData: (data: AppData) => void;
   calculations: any;
   updateInvestments: (items: InvestmentItem[]) => void;
 };
@@ -12,7 +14,26 @@ type BepRoiProps = {
 export const BepRoi: React.FC<BepRoiProps> = ({ data, calculations, updateInvestments }) => {
   const { totalFixedMonthly, hppPerUnitFinal, totalInvestment, variableCostPerUnit } = calculations;
   
-  // Calculate BEP for Retail Price
+  const [draftInvestments, setDraftInvestments] = useState<InvestmentItem[]>(data.investments);
+
+  // Sync draft state with data prop when it changes
+  useEffect(() => {
+    setDraftInvestments(data.investments);
+  }, [data.investments]);
+
+  const hasInvestChanges = JSON.stringify(draftInvestments) !== JSON.stringify(data.investments);
+
+  const saveInvest = () => {
+    updateInvestments(draftInvestments);
+  };
+
+  const cancelInvest = () => {
+    setDraftInvestments(data.investments);
+  };
+
+  // Calculate BEP for Retail Price based on DRAFT if possible, but calculations use REAL data.
+  // Actually, BEP/ROI is viewing Real data. Only Investments is editable here.
+  
   const retailPrice = hppPerUnitFinal * (1 + data.priceLevels[0].markupPercent / 100);
   const contributionMargin = retailPrice - variableCostPerUnit;
   const bepUnit = Math.ceil(totalFixedMonthly / contributionMargin);
@@ -60,38 +81,49 @@ export const BepRoi: React.FC<BepRoiProps> = ({ data, calculations, updateInvest
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="glass-card p-6 space-y-4">
              <div className="flex justify-between items-center mb-4">
-                <h3 className="font-bold">Item Investasi Awal</h3>
-                <button 
-                  onClick={() => updateInvestments([...data.investments, { id: Math.random().toString(), name: '', value: 0, usefulLife: 3 }])}
-                  className="btn-primary py-1.5 text-xs"
-                >
-                  <Plus className="w-3 h-3" /> Tambah
-                </button>
+                <div>
+                  <h3 className="font-bold">Item Investasi Awal</h3>
+                  {hasInvestChanges && <p className="text-[10px] text-accent-primary font-bold animate-pulse">PERUBAHAN BELUM TERSIMPAN</p>}
+                </div>
+                <div className="flex gap-2">
+                  {hasInvestChanges && (
+                    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="flex gap-2">
+                      <button onClick={saveInvest} className="flex items-center gap-2 bg-emerald-500/20 text-emerald-500 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-500 hover:text-white transition-all"><Save className="w-3 h-3" /> Simpan</button>
+                      <button onClick={cancelInvest} className="flex items-center gap-2 bg-accent-danger/20 text-accent-danger px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-accent-danger hover:text-white transition-all"><X className="w-3 h-3" /> Batal</button>
+                    </motion.div>
+                  )}
+                  <button 
+                    onClick={() => setDraftInvestments([...draftInvestments, { id: Math.random().toString(), name: '', value: 0, usefulLife: 3 }])}
+                    className="btn-primary py-1.5 text-xs flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" /> Tambah
+                  </button>
+                </div>
              </div>
              <table className="w-full text-xs">
                 <thead className="text-slate-500 border-b border-border-main">
                    <tr>
-                      <th className="pb-2 text-left">Komponen</th>
-                      <th className="pb-2 text-right">Nilai (Rp)</th>
-                      <th className="pb-2 text-right">Aksi</th>
+                      <th className="pb-2 text-left px-1">Komponen</th>
+                      <th className="pb-2 text-right px-1">Nilai (Rp)</th>
+                      <th className="pb-2 text-right px-1 w-8"></th>
                    </tr>
                 </thead>
                 <tbody className="divide-y divide-border-main">
-                   {data.investments.map((iv, i) => (
-                      <tr key={iv.id}>
-                         <td className="py-2"><input type="text" value={iv.name} onChange={e => {
-                           const n = [...data.investments]; n[i].name = e.target.value; updateInvestments(n);
-                         }} className="input-inline w-full" /></td>
-                         <td className="py-2 text-right"><input type="number" value={iv.value} onChange={e => {
-                           const n = [...data.investments]; n[i].value = Number(e.target.value); updateInvestments(n);
-                         }} className="input-inline w-24 text-right" /></td>
-                         <td className="py-2 text-right"><button onClick={() => updateInvestments(data.investments.filter(item => item.id !== iv.id))}><Trash2 className="w-4 h-4 text-accent-danger" /></button></td>
+                   {draftInvestments.map((iv, i) => (
+                      <tr key={iv.id} className="hover:bg-white/5 group transition-colors">
+                         <td className="py-2 px-1"><input type="text" value={iv.name || ''} onChange={e => {
+                           const n = [...draftInvestments]; n[i].name = e.target.value; setDraftInvestments(n);
+                         }} className="input-inline w-full border-transparent focus:border-accent-primary" placeholder="Contoh: Mesin Oven" /></td>
+                         <td className="py-2 text-right px-1"><input type="number" value={iv.value || 0} onChange={e => {
+                           const n = [...draftInvestments]; n[i].value = Number(e.target.value); setDraftInvestments(n);
+                         }} className="input-inline w-24 text-right border-transparent focus:border-accent-primary" /></td>
+                         <td className="py-2 text-right px-1"><button onClick={() => setDraftInvestments(draftInvestments.filter(item => item.id !== iv.id))} className="opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-3 h-3 text-accent-danger" /></button></td>
                       </tr>
                    ))}
                 </tbody>
              </table>
              <div className="pt-4 border-t border-border-main flex justify-between">
-                <span className="font-bold">Total Investasi</span>
+                <span className="font-bold">Total Investasi Tersimpan</span>
                 <span className="font-bold text-accent-primary">{formatRupiah(totalInvestment)}</span>
              </div>
           </div>

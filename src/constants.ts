@@ -1,4 +1,27 @@
-import { AppData } from './types';
+import { AppData, UserAccount } from './types';
+
+export const INITIAL_ACCOUNTS: UserAccount[] = [
+  { 
+    id: 'owner-1', 
+    username: 'owner', 
+    password: 'owner123', 
+    role: 'owner', 
+    fullName: 'Pemilik Bisnis',
+    activeUntil: '2099-12-31',
+    enabledFeatures: ['all'],
+    status: 'active'
+  },
+  { 
+    id: 'member-1', 
+    username: 'admin', 
+    password: 'admin123', 
+    role: 'member', 
+    fullName: 'Admin Produksi',
+    activeUntil: '2026-12-31',
+    enabledFeatures: ['dashboard', 'materials', 'production_costs', 'results', 'pricing', 'bep_roi', 'report'],
+    status: 'active'
+  },
+];
 
 export const INITIAL_DATA: AppData = {
   materials: [
@@ -41,3 +64,38 @@ export const INITIAL_DATA: AppData = {
     { id: '2', name: 'Setup Dapur', value: 2000000, usefulLife: 2 },
   ],
 };
+
+export const APP_FEATURES = [
+  { id: 'dashboard', label: 'Dashboard', desc: 'Ringkasan visual produksi' },
+  { id: 'materials', label: 'Bahan Baku', desc: 'Stok & harga bahan' },
+  { id: 'production_costs', label: 'Biaya Prod', desc: 'Gaji & operasional' },
+  { id: 'results', label: 'Kapasitas', desc: 'Target & batch produksi' },
+  { id: 'pricing', label: 'Pricing', desc: 'Markup & leveling harga' },
+  { id: 'bep_roi', label: 'BEP & ROI', desc: 'Analisis balik modal' },
+  { id: 'report', label: 'Laporan', desc: 'Export PDF & JPG' },
+  { id: 'recipes', label: 'Resep Produk', desc: 'Simpan & Kelola Resep' },
+];
+
+export const PLUGIN_PACKAGES = [
+  { 
+    id: 'starter', 
+    name: 'Starter Pack', 
+    features: ['dashboard', 'materials', 'results'],
+    recommendation: 'Cocok untuk UMKM pemula yang fokus pada monitoring stok.',
+    color: '#94a3b8'
+  },
+  { 
+    id: 'pro', 
+    name: 'Professional', 
+    features: ['dashboard', 'materials', 'production_costs', 'results', 'pricing'],
+    recommendation: 'Ideal untuk bisnis yang sudah mulai menghitung profitabilitas.',
+    color: '#00c9a7'
+  },
+  { 
+    id: 'enterprise', 
+    name: 'Enterprise', 
+    features: ['dashboard', 'materials', 'production_costs', 'results', 'pricing', 'bep_roi', 'report', 'recipes'],
+    recommendation: 'Solusi lengkap untuk analisis mendalam dan pelaporan resmi.',
+    color: '#0891b2'
+  }
+];

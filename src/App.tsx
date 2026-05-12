@@ -8,20 +8,87 @@ import { PriceLeveling } from './components/PriceLeveling';
 import { BepRoi } from './components/BepRoi';
 import { Report } from './components/Report';
 import { Login } from './components/Login';
+import { OwnerDashboard } from './components/OwnerDashboard';
+import { OwnerFeatureManagement } from './components/OwnerFeatureManagement';
+import { OwnerSubscription } from './components/OwnerSubscription';
+import { OwnerPlugins } from './components/OwnerPlugins';
+import { OwnerCRM } from './components/OwnerCRM';
+import { OwnerPanel } from './components/OwnerPanel';
+import { ManajemenProfil } from './components/ManajemenProfil';
+import { MemberProfile } from './components/MemberProfile';
+import { Recipes } from './components/Recipes';
 import { useHppData } from './hooks/useHppData';
 import { cn } from './lib/utils';
 import { Download, Upload, RotateCcw, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { UserAccount, OwnerSettings } from './types';
+import { INITIAL_ACCOUNTS } from './constants';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState<string | null>(null);
+  const [user, setUser] = useState<UserAccount | null>(null);
+
+  const [ownerSettings, setOwnerSettings] = useState<OwnerSettings>(() => {
+    const defaults: OwnerSettings = {
+      whatsappNumber: '628123456789',
+      isWhatsappEnabled: true,
+      customDomain: '',
+      domainStatus: 'not_configured',
+      primaryColor: '#00c9a7'
+    };
+    const saved = localStorage.getItem('costmaster_owner_settings');
+    if (saved) {
+      try {
+        return { ...defaults, ...JSON.parse(saved) };
+      } catch (e) {
+        return defaults;
+      }
+    }
+    return defaults;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('costmaster_owner_settings', JSON.stringify(ownerSettings));
+    if (ownerSettings.primaryColor) {
+      document.documentElement.style.setProperty('--color-accent-primary', ownerSettings.primaryColor);
+      // Also generate a muted version for background opacities if needed, 
+      // but Tailwind 4 might handle opacity differently.
+      // Usually --color-accent-primary is enough for @theme
+    }
+  }, [ownerSettings]);
+
+  // Global Accounts Management (Centralized)
+  const [accounts, setAccounts] = useState<UserAccount[]>(() => {
+    const saved = localStorage.getItem('costmaster_pro_accounts');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return parsed.map((acc: any) => ({
+          fullName: '',
+          username: '',
+          password: '',
+          activeUntil: new Date().toISOString().split('T')[0],
+          status: 'active',
+          ...acc,
+          enabledFeatures: acc.enabledFeatures || (acc.role === 'owner' ? ['all'] : ['dashboard'])
+        }));
+      } catch (e) {
+        return INITIAL_ACCOUNTS;
+      }
+    }
+    return INITIAL_ACCOUNTS;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('costmaster_pro_accounts', JSON.stringify(accounts));
+  }, [accounts]);
 
   const { 
     data, 
     calculations, 
+    setData,
     updateMaterials, 
     updateLabor, 
     updateOverhead, 
@@ -32,27 +99,35 @@ export default function App() {
     exportData, 
     importData, 
     resetData 
-  } = useHppData();
+  } = useHppData(user?.id || null);
+
+  const updateAccounts = (newAccounts: UserAccount[]) => {
+    setAccounts(newAccounts);
+  };
 
   // Load auth state
   useEffect(() => {
-    const savedUser = localStorage.getItem('costmaster_user');
-    if (savedUser) {
-      setIsAuthenticated(true);
-      setUser(savedUser);
+    const savedUserId = localStorage.getItem('costmaster_user_id');
+    if (savedUserId && accounts) {
+      const match = accounts.find(a => a.id === savedUserId);
+      if (match) {
+        setIsAuthenticated(true);
+        setUser(match);
+      }
     }
-  }, []);
+  }, [accounts]);
 
-  const handleLogin = (username: string) => {
+  const handleLogin = (account: UserAccount) => {
     setIsAuthenticated(true);
-    setUser(username);
-    localStorage.setItem('costmaster_user', username);
+    setUser(account);
+    localStorage.setItem('costmaster_user_id', account.id);
+    setActiveTab(account.role === 'owner' ? 'owner_dashboard' : 'dashboard');
   };
 
   const handleLogout = () => {
     setIsAuthenticated(false);
     setUser(null);
-    localStorage.removeItem('costmaster_user');
+    localStorage.removeItem('costmaster_user_id');
   };
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -65,22 +140,49 @@ export default function App() {
   };
 
   const renderContent = () => {
-    const props = { data, calculations, updateMaterials, updateLabor, updateOverhead, updateNonProduction, updateProduction, updatePriceLevels, updateInvestments };
+    const props = { data, setData, calculations, updateMaterials, updateLabor, updateOverhead, updateNonProduction, updateProduction, updatePriceLevels, updateInvestments, updateAccounts };
     
     switch (activeTab) {
-      case 'dashboard': return <Dashboard data={data} calculations={calculations} />;
-      case 'materials': return <RawMaterials {...props} />;
-      case 'production_costs': return <ProductionCosts {...props} />;
-      case 'results': return <ProductionResults {...props} />;
-      case 'pricing': return <PriceLeveling {...props} />;
-      case 'bep_roi': return <BepRoi {...props} />;
-      case 'report': return <Report {...props} />;
+      // Member Routes
+      case 'dashboard': return <Dashboard data={data} setData={setData} calculations={calculations} user={user} updateAccounts={updateAccounts} accounts={accounts} ownerSettings={ownerSettings} />;
+      case 'materials': 
+        if (user?.role === 'member' && !user.enabledFeatures?.includes('materials')) return <Dashboard data={data} setData={setData} calculations={calculations} />;
+        return <RawMaterials {...props} />;
+      case 'production_costs': 
+        if (user?.role === 'member' && !user.enabledFeatures?.includes('production_costs')) return <Dashboard data={data} calculations={calculations} />;
+        return <ProductionCosts {...props} />;
+      case 'results': 
+        if (user?.role === 'member' && !user.enabledFeatures?.includes('results')) return <Dashboard data={data} calculations={calculations} />;
+        return <ProductionResults {...props} />;
+      case 'pricing': 
+        if (user?.role === 'member' && !user.enabledFeatures?.includes('pricing')) return <Dashboard data={data} calculations={calculations} />;
+        return <PriceLeveling {...props} />;
+      case 'bep_roi': 
+        if (user?.role === 'member' && !user.enabledFeatures?.includes('bep_roi')) return <Dashboard data={data} calculations={calculations} />;
+        return <BepRoi {...props} />;
+      case 'report': 
+        if (user?.role === 'member' && !user.enabledFeatures?.includes('report')) return <Dashboard data={data} setData={setData} calculations={calculations} />;
+        return <Report {...props} />;
+      case 'recipes':
+        if (user?.role === 'member' && !user.enabledFeatures?.includes('recipes')) return <Dashboard data={data} setData={setData} calculations={calculations} />;
+        return <Recipes data={data} setData={setData} />;
+      case 'member_profile': return <MemberProfile user={user} updateAccounts={updateAccounts} accounts={accounts} onUpdateUser={setUser} />;
+      
+      // Owner Routes
+      case 'owner_dashboard': return <OwnerDashboard accounts={accounts} />;
+      case 'owner_accounts': return <OwnerFeatureManagement accounts={accounts} updateAccounts={updateAccounts} />;
+      case 'owner_subscriptions': return <OwnerSubscription accounts={accounts} updateAccounts={updateAccounts} ownerSettings={ownerSettings} />;
+      case 'owner_profile': return <ManajemenProfil ownerSettings={ownerSettings} setOwnerSettings={setOwnerSettings} />;
+      case 'owner_plugins': return <OwnerPlugins />;
+      case 'owner_crm': return <OwnerCRM accounts={accounts} />;
+      case 'owner_panel': return <OwnerPanel accounts={accounts} updateAccounts={updateAccounts} />; // Legacy or additional settings
+      
       default: return <Dashboard data={data} calculations={calculations} />;
     }
   };
 
   if (!isAuthenticated) {
-    return <Login onLogin={handleLogin} />;
+    return <Login accounts={accounts} onLogin={handleLogin} />;
   }
 
   return (
@@ -90,6 +192,9 @@ export default function App() {
         setActiveTab={setActiveTab} 
         isCollapsed={isCollapsed} 
         setIsCollapsed={setIsCollapsed} 
+        role={user?.role}
+        enabledFeatures={user?.enabledFeatures}
+        ownerSettings={ownerSettings}
       />
       
       <main className={cn(
@@ -104,7 +209,7 @@ export default function App() {
             </h2>
             <div className="h-4 w-[1px] bg-border-main"></div>
             <p className="text-[10px] text-text-secondary font-medium uppercase tracking-wider">
-              {user}'s Workstation
+              {user?.fullName}'s Workstation
             </p>
           </div>
           

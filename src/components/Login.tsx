@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { Lock, User, LogIn, CircleDollarSign, AlertCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion } from 'motion/react';
+import { UserAccount } from '../types';
 
 type LoginProps = {
-  onLogin: (username: string) => void;
+  accounts: UserAccount[];
+  onLogin: (account: UserAccount) => void;
 };
 
-export const Login: React.FC<LoginProps> = ({ onLogin }) => {
+export const Login: React.FC<LoginProps> = ({ accounts, onLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -18,15 +20,16 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setIsLoading(true);
     setError('');
 
-    // Simuasi login (Demo purposes)
+    // Simulate login
     setTimeout(() => {
-      if (username === 'admin' && password === 'admin123') {
-        onLogin(username);
+      const match = (accounts || []).find(a => a.username === username && a.password === password);
+      if (match) {
+        onLogin(match);
       } else {
-        setError('Kredensial salah. Gunakan admin / admin123');
+        setError('Username atau Password salah.');
         setIsLoading(false);
       }
-    }, 1000);
+    }, 800);
   };
 
   return (

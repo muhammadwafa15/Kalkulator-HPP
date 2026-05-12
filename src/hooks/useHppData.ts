@@ -2,35 +2,58 @@ import { useState, useEffect, useMemo } from 'react';
 import { AppData, RawMaterial, LaborCost, OverheadCost, NonProductionCost, PriceLevel, InvestmentItem } from '../types';
 import { INITIAL_DATA } from '../constants';
 
-export function useHppData() {
-  const [data, setData] = useState<AppData>(() => {
-    const saved = localStorage.getItem('costmaster_pro_data');
-    return saved ? JSON.parse(saved) : INITIAL_DATA;
-  });
+export function useHppData(userId: string | null) {
+  const storageKey = userId ? `costmaster_pro_data_${userId}` : null;
 
+  const [data, setData] = useState<AppData>(INITIAL_DATA);
+
+  // Sync data when storageKey changes (switch user)
   useEffect(() => {
-    localStorage.setItem('costmaster_pro_data', JSON.stringify(data));
-  }, [data]);
+    if (storageKey) {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        try {
+          setData({ ...INITIAL_DATA, ...JSON.parse(saved) });
+        } catch (e) {
+          setData(INITIAL_DATA);
+        }
+      } else {
+        setData(INITIAL_DATA);
+      }
+    } else {
+      setData(INITIAL_DATA);
+    }
+  }, [storageKey]);
+
+  // Save changes to localStorage only IF we have a storageKey and data has changed
+  useEffect(() => {
+    if (storageKey) {
+      localStorage.setItem(storageKey, JSON.stringify(data));
+    }
+  }, [data, storageKey]);
 
   const calculations = useMemo(() => {
     // 1. Material Calculations
-    const totalMaterialBatch = data.materials.reduce((acc, m) => acc + (m.qty * m.pricePerUnit), 0) * data.batchesPerProduction;
-    const materialPerUnit = totalMaterialBatch / (data.batchesPerProduction * data.production.unitsPerBatch);
+    const unitsPerBatch = data.production.unitsPerBatch || 1;
+    const batchesPerProduction = data.batchesPerProduction || 1;
+    const batchesPerMonth = data.production.batchesPerMonth || 1;
+
+    const totalMaterialBatch = data.materials.reduce((acc, m) => acc + (m.qty * m.pricePerUnit), 0) * batchesPerProduction;
+    const materialPerUnit = totalMaterialBatch / (batchesPerProduction * unitsPerBatch);
 
     // 2. Labor Calculations
     const totalLaborBatch = data.laborCosts.reduce((acc, l) => acc + (l.count * l.wagePerHour * l.hoursPerBatch), 0);
-    const laborPerUnit = totalLaborBatch / data.production.unitsPerBatch;
+    const laborPerUnit = totalLaborBatch / unitsPerBatch;
 
     // 3. Overhead Calculations
     const totalMonthlyOverhead = data.overheadCosts.reduce((acc, o) => acc + (o.monthlyValue * (o.allocationPercent / 100)), 0);
-    const totalBatchesPerMonth = data.production.batchesPerMonth;
-    const overheadPerBatch = totalMonthlyOverhead / totalBatchesPerMonth;
-    const overheadPerUnit = overheadPerBatch / data.production.unitsPerBatch;
+    const overheadPerBatch = totalMonthlyOverhead / (batchesPerMonth || 1);
+    const overheadPerUnit = overheadPerBatch / unitsPerBatch;
 
     // 4. Non-Production Calculations
     const totalMonthlyNonProduction = data.nonProductionCosts.reduce((acc, n) => acc + n.monthlyValue, 0);
-    const unitsPerMonth = data.production.unitsPerBatch * data.production.batchesPerMonth;
-    const nonProductionPerUnit = totalMonthlyNonProduction / unitsPerMonth;
+    const unitsPerMonth = unitsPerBatch * batchesPerMonth;
+    const nonProductionPerUnit = totalMonthlyNonProduction / (unitsPerMonth || 1);
 
     // 5. Total HPP & Waste
     const baseHppPerUnit = materialPerUnit + laborPerUnit + overheadPerUnit + nonProductionPerUnit;
@@ -78,6 +101,7 @@ export function useHppData() {
   const updateInvestments = (investments: InvestmentItem[]) => setData(prev => ({ ...prev, investments }));
 
   const exportData = () => {
+    if (!userId) return;
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -98,6 +122,7 @@ export function useHppData() {
   return {
     data,
     calculations,
+    setData,
     updateProduction,
     updateMaterials,
     updateLabor,

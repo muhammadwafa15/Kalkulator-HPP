@@ -54,6 +54,51 @@ export type InvestmentItem = {
   usefulLife: number; // in years
 };
 
+export type UserRole = 'owner' | 'member';
+
+export type UpgradeRequest = {
+  packageId: string;
+  status: 'pending' | 'approved' | 'rejected';
+  requestDate: string;
+  paymentLink?: string;
+};
+
+export type UserAccount = {
+  id: string;
+  username: string;
+  password: string;
+  role: UserRole;
+  fullName: string;
+  activeUntil: string; // ISO date string
+  enabledFeatures: string[]; // List of feature IDs
+  status: 'active' | 'expired' | 'pending';
+  upgradeRequest?: UpgradeRequest;
+};
+
+export type DomainStatus = 'not_configured' | 'pending' | 'active' | 'error';
+
+export type OwnerSettings = {
+  logoUrl?: string;
+  whatsappNumber: string;
+  isWhatsappEnabled: boolean;
+  customDomain?: string;
+  domainStatus?: DomainStatus;
+  primaryColor: string;
+};
+
+export type Recipe = {
+  id: string;
+  name: string;
+  hppPerUnit: number;
+  totalCost: number;
+  unitsPerBatch: number;
+  batchesPerMonth: number;
+  materials: RawMaterial[];
+  laborCosts: LaborCost[];
+  overheadCosts: OverheadCost[];
+  createdAt: string;
+};
+
 export type AppData = {
   materials: RawMaterial[];
   batchesPerProduction: number;
@@ -63,4 +108,5 @@ export type AppData = {
   production: ProductionResult;
   priceLevels: PriceLevel[];
   investments: InvestmentItem[];
+  recipes?: Recipe[];
 };

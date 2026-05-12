@@ -12,9 +12,10 @@ import {
   LineElement
 } from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
-import { AlertCircle, TrendingUp, TrendingDown, Info, BarChart3 } from 'lucide-react';
+import { AlertCircle, TrendingUp, TrendingDown, Info, BarChart3, ShieldCheck, Crown, Zap, ExternalLink, ShieldAlert, CreditCard, Save } from 'lucide-react';
 import { formatRupiah, cn } from '../lib/utils';
-import { AppData } from '../types';
+import { AppData, UserAccount, Recipe } from '../types';
+import { APP_FEATURES, PLUGIN_PACKAGES } from '../constants';
 
 ChartJS.register(
   ArcElement, 
@@ -30,11 +31,47 @@ ChartJS.register(
 
 type DashboardProps = {
   data: AppData;
+  setData: (data: AppData) => void;
   calculations: any;
+  user: UserAccount | null;
+  updateAccounts: (accounts: UserAccount[]) => void;
+  accounts: UserAccount[];
+  ownerSettings: any;
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ data, calculations }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ data, setData, calculations, user, updateAccounts, accounts, ownerSettings }) => {
   const { hppPerUnitFinal, totalCostPerMonth, unitsPerMonth, variableCostPerUnit, totalFixedMonthly } = calculations;
+
+  const handleSaveRecipe = () => {
+    const isEnterprise = user?.enabledFeatures?.includes('recipes');
+    if (!isEnterprise) {
+      alert('Fitur Simpan Resep hanya tersedia untuk paket Enterprise.');
+      return;
+    }
+
+    const recipeName = prompt('Masukkan nama produk untuk resep ini:');
+    if (recipeName) {
+      const newRecipe: Recipe = {
+        id: Math.random().toString(36).substr(2, 9),
+        name: recipeName,
+        hppPerUnit: hppPerUnitFinal,
+        totalCost: calculations.totalMaterialBatch + calculations.laborPerUnit * data.production.unitsPerBatch + (calculations.overheadPerUnit * data.production.unitsPerBatch),
+        unitsPerBatch: data.production.unitsPerBatch,
+        batchesPerMonth: data.production.batchesPerMonth,
+        materials: [...data.materials],
+        laborCosts: [...data.laborCosts],
+        overheadCosts: [...data.overheadCosts],
+        createdAt: new Date().toISOString()
+      };
+      
+      const currentRecipes = data.recipes || [];
+      setData({
+        ...data,
+        recipes: [...currentRecipes, newRecipe]
+      });
+      alert('Resep berhasil disimpan ke menu Produk & Resep!');
+    }
+  };
 
   const retailLevel = data.priceLevels[0];
   const retailPrice = hppPerUnitFinal * (1 + retailLevel.markupPercent / 100);
@@ -45,6 +82,40 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, calculations }) => {
   const totalInvestment = data.investments.reduce((acc, i) => acc + i.value, 0);
   const monthlyProfit = (retailPrice - hppPerUnitFinal) * unitsPerMonth;
   const roiMonthly = (monthlyProfit / totalInvestment) * 100;
+
+  // Subscription logic
+  const expiryDate = user?.activeUntil ? new Date(user.activeUntil) : null;
+  const today = new Date();
+  const diffTime = expiryDate ? expiryDate.getTime() - today.getTime() : 0;
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const isExpired = diffDays <= 0;
+  const isWarning = diffDays > 0 && diffDays <= 7;
+
+  const handleUpgrade = (packageId: string) => {
+    if (!user) return;
+    
+    const requestDate = new Date().toISOString();
+    const waNumber = ownerSettings?.whatsappNumber || '628123456789';
+    const isWaEnabled = ownerSettings?.isWhatsappEnabled ?? true;
+    const paymentLink = isWaEnabled 
+      ? `https://wa.me/${waNumber}?text=Halo%20Owner%2C%20saya%20ingin%20upgrade%20ke%20paket%20${packageId.toUpperCase()}%20untuk%20akun%20${user.username}`
+      : undefined;
+    
+    const updatedAccounts = accounts.map(a => 
+      a.id === user.id ? { 
+        ...a, 
+        upgradeRequest: { 
+          packageId, 
+          status: 'pending' as const, 
+          requestDate,
+          paymentLink
+        } 
+      } : a
+    );
+    
+    updateAccounts(updatedAccounts);
+    alert(`Permintaan upgrade ke paket ${packageId.toUpperCase()} telah dikirim ke Owner. Silakan hubungi owner untuk pembayaran.`);
+  };
 
   const doughnutData = {
     labels: ['Bahan Baku', 'Tenaga Kerja', 'Overhead', 'Non-Produksi', 'Waste'],
@@ -93,10 +164,57 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, calculations }) => {
           <p className="text-text-secondary text-sm">Periode Produksi: {new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}</p>
         </div>
         <div className="flex gap-3">
-          <button className="px-4 py-2 rounded-xl bg-[#2d4a5a] text-sm font-medium border border-white/10 hover:bg-[#3d5a6a] transition-colors">Export Data</button>
+          <button 
+            onClick={handleSaveRecipe}
+            className="px-4 py-2 rounded-xl bg-[#2d4a5a] text-sm font-medium border border-white/10 hover:bg-[#3d5a6a] transition-colors flex items-center gap-2"
+          >
+            <Save className="w-4 h-4" /> Simpan Resep
+          </button>
           <button className="px-4 py-2 rounded-xl bg-accent-primary text-black text-sm font-bold shadow-lg shadow-accent-primary/20 hover:scale-105 transition-transform">+ Tambah Produksi</button>
         </div>
       </div>
+
+      {/* Subscription Alert */}
+      {user?.role === 'member' && (isExpired || isWarning) && (
+        <div className={cn(
+          "p-5 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-4 border-2 animate-in slide-in-from-top-4 duration-700",
+          isExpired 
+            ? "bg-accent-danger/20 border-accent-danger/30 text-white shadow-xl shadow-accent-danger/20" 
+            : "bg-accent-warning/20 border-accent-warning/30 text-white shadow-xl shadow-accent-warning/20"
+        )}>
+          <div className="flex items-center gap-4">
+            <div className={cn(
+              "w-12 h-12 rounded-2xl flex items-center justify-center",
+              isExpired ? "bg-accent-danger text-white" : "bg-accent-warning text-black"
+            )}>
+              <ShieldAlert className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="font-black text-lg uppercase tracking-tight">
+                {isExpired ? "Masa Aktif Berakhir!" : "Masa Aktif Akan Berakhir"}
+              </h3>
+              <p className="text-sm opacity-80">
+                {isExpired 
+                  ? `Masa aktif Anda telah habis pada ${expiryDate?.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}. Akses fitur mungkin terbatas.`
+                  : `Masa aktif Anda tersisa ${diffDays} hari lagi (Berakhir ${expiryDate?.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}).`
+                }
+              </p>
+            </div>
+          </div>
+          <button 
+            onClick={() => {
+              const upgradeSection = document.getElementById('upgrade-section');
+              upgradeSection?.scrollIntoView({ behavior: 'smooth' });
+            }}
+            className={cn(
+              "px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-transform hover:scale-105 active:scale-95",
+              isExpired ? "bg-accent-danger text-white" : "bg-accent-warning text-black"
+            )}
+          >
+            {isExpired ? "Aktifkan Kembali" : "Perpanjang Sekarang"}
+          </button>
+        </div>
+      )}
 
       {/* Stats Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -164,6 +282,104 @@ export const Dashboard: React.FC<DashboardProps> = ({ data, calculations }) => {
               }} 
             />
           </div>
+        </div>
+      </div>
+
+      {/* Upgrade Features Section */}
+      <div id="upgrade-section" className="space-y-6 scroll-mt-24">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold flex items-center gap-3 italic">
+            <Zap className="text-accent-warning w-6 h-6 fill-accent-warning" /> 
+            Upgrade Level Produksi
+          </h2>
+          <div className="h-[1px] flex-1 bg-white/5 mx-6"></div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {PLUGIN_PACKAGES.map(pkg => {
+            const isCurrent = user?.enabledFeatures?.length === pkg.features.length;
+            const isPending = user?.upgradeRequest?.packageId === pkg.id && user?.upgradeRequest?.status === 'pending';
+
+            return (
+              <div 
+                key={pkg.id} 
+                className={cn(
+                  "glass-card p-6 border-white/5 relative group transition-all duration-500",
+                  isCurrent ? "ring-2 ring-accent-primary bg-accent-primary/5" : "hover:border-white/20"
+                )}
+              >
+                {isCurrent && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-accent-primary text-black text-[10px] font-black uppercase tracking-widest rounded-full shadow-lg shadow-accent-primary/20">
+                    Paket Saat Ini
+                  </div>
+                )}
+                
+                <div className="flex items-center justify-between mb-6">
+                  <div className="p-3 rounded-2xl bg-white/5 border border-white/10 group-hover:scale-110 transition-transform">
+                    {pkg.id === 'starter' && <Zap className="w-6 h-6 text-slate-400" />}
+                    {pkg.id === 'pro' && <ShieldCheck className="w-6 h-6 text-accent-primary" />}
+                    {pkg.id === 'enterprise' && <Crown className="w-6 h-6 text-accent-secondary" />}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] text-text-secondary uppercase font-bold tracking-widest">Mulai dari</p>
+                    <p className="text-lg font-black text-white">
+                      {pkg.id === 'starter' ? 'FREE' : pkg.id === 'pro' ? 'Rp 99rb' : 'Rp 299rb'}
+                    </p>
+                  </div>
+                </div>
+
+                <h4 className="text-lg font-bold mb-2 group-hover:text-accent-primary transition-colors">{pkg.name}</h4>
+                <p className="text-[11px] text-text-secondary leading-relaxed mb-6 italic min-h-[40px]">
+                  "{pkg.recommendation}"
+                </p>
+
+                <ul className="space-y-3 mb-8">
+                  {pkg.features.slice(0, 5).map(fid => (
+                    <li key={fid} className="flex items-center gap-3 text-[11px]">
+                      <div className="w-4 h-4 rounded-full bg-accent-primary/20 flex items-center justify-center">
+                        <TrendingUp className="w-2.5 h-2.5 text-accent-primary" />
+                      </div>
+                      <span className="text-text-secondary">{APP_FEATURES.find(af => af.id === fid)?.label}</span>
+                    </li>
+                  ))}
+                  {pkg.features.length > 5 && (
+                    <li className="text-[10px] text-accent-primary font-bold pl-7">+ {pkg.features.length - 5} Fitur Lanjutan</li>
+                  )}
+                </ul>
+
+                {isPending ? (
+                  <div className="space-y-3">
+                    <div className="w-full py-3 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center gap-2 text-accent-warning text-[10px] font-black uppercase italic tracking-widest">
+                      <CreditCard className="w-4 h-4 animate-pulse" /> Pending Approval
+                    </div>
+                    {user?.upgradeRequest?.paymentLink && (
+                      <a 
+                        href={user.upgradeRequest.paymentLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="w-full py-3 bg-accent-warning text-black rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] transition-transform"
+                      >
+                        Bayar Sekarang <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                  </div>
+                ) : (
+                  <button 
+                    disabled={isCurrent}
+                    onClick={() => handleUpgrade(pkg.id)}
+                    className={cn(
+                      "w-full py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all",
+                      isCurrent 
+                        ? "bg-white/5 text-slate-500 cursor-not-allowed border border-white/5" 
+                        : "bg-accent-primary text-black hover:scale-105 active:scale-95 shadow-lg shadow-accent-primary/20"
+                    )}
+                  >
+                    {isCurrent ? "TERAKTIVASI" : "PILIH PAKET"}
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
